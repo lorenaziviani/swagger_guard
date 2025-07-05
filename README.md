@@ -62,3 +62,34 @@ security:
 ## Diagrama
 
 Veja o fluxo inicial do CLI e parser em `docs/cli_openapi_parser.drawio`.
+
+## Checagens automáticas OWASP Top 10
+
+O comando `parse` agora realiza checagens automáticas de segurança baseadas no OWASP Top 10:
+
+- **Rotas sem autenticação** (security: [])
+- **Uso de GET para criação/deleção**
+- **Ausência de HTTPS** (servers.url não usa https)
+- **Parâmetros de query sem tipo**
+- **Métodos inseguros** (TRACE, OPTIONS abertos)
+
+Exemplo de saída:
+
+```
+OWASP Top 10 Issues:
+
+[No Authentication]
+- GET /usuarios
+
+[No HTTPS]
+- http://api.exemplo.com
+
+[Query parameter without type]
+- GET /usuarios param: filtro
+```
+
+Se nenhuma falha for encontrada:
+
+```
+No OWASP Top 10 issues found!
+```

@@ -45,7 +45,52 @@ var parseCmd = &cobra.Command{
 			fmt.Printf("Error parsing OpenAPI spec: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("Paths:")
+
+		// --- OWASP Top 10 Checks ---
+		failures := make(map[string][]string)
+
+		// 1. Routes without authentication (security: [])
+		for path, pathItem := range doc.Paths.Map() {
+			for method, op := range pathItem.Operations() {
+				if op.Security != nil && len(*op.Security) == 0 {
+					failures["No Authentication"] = append(failures["No Authentication"], fmt.Sprintf("%s %s", method, path))
+				}
+				// 2. GET for create/delete
+				if method == "GET" && (op.OperationID != "" && (containsWord(op.OperationID, "create") || containsWord(op.OperationID, "delete"))) {
+					failures["GET used for create/delete"] = append(failures["GET used for create/delete"], fmt.Sprintf("%s %s (operationId: %s)", method, path, op.OperationID))
+				}
+				// 5. Insecure HTTP Methods
+				if method == "TRACE" || method == "OPTIONS" {
+					failures["Insecure HTTP Methods"] = append(failures["Insecure HTTP Methods"], fmt.Sprintf("%s %s", method, path))
+				}
+				// 4. Query parameters without type
+				for _, param := range op.Parameters {
+					if param.Value.In == "query" && param.Value.Schema == nil {
+						failures["Query parameter without type"] = append(failures["Query parameter without type"], fmt.Sprintf("%s %s param: %s", method, path, param.Value.Name))
+					}
+				}
+			}
+		}
+		// 3. Absence of HTTPS
+		for _, server := range doc.Servers {
+			if server.URL != "" && !startsWithHTTPS(server.URL) {
+				failures["No HTTPS"] = append(failures["No HTTPS"], server.URL)
+			}
+		}
+
+		if len(failures) == 0 {
+			fmt.Println("No OWASP Top 10 issues found!")
+		} else {
+			fmt.Println("OWASP Top 10 Issues:")
+			for category, items := range failures {
+				fmt.Printf("\n[%s]\n", category)
+				for _, item := range items {
+					fmt.Printf("- %s\n", item)
+				}
+			}
+		}
+
+		fmt.Println("\nPaths:")
 		for path, pathItem := range doc.Paths.Map() {
 			fmt.Printf("- %s\n", path)
 			for method := range pathItem.Operations() {
@@ -62,6 +107,22 @@ var parseCmd = &cobra.Command{
 			}
 		}
 	},
+}
+
+func startsWithHTTPS(url string) bool {
+	return len(url) >= 8 && url[:8] == "https://"
+}
+
+func containsWord(s, word string) bool {
+	return len(s) > 0 && len(word) > 0 && (containsIgnoreCase(s, word))
+}
+
+func containsIgnoreCase(s, substr string) bool {
+	return len(s) > 0 && len(substr) > 0 && (stringContainsFold(s, substr))
+}
+
+func stringContainsFold(s, substr string) bool {
+	return len(s) > 0 && len(substr) > 0 && (len([]rune(s)) >= len([]rune(substr)) && (s == substr || (len(s) > len(substr) && (s[:len(substr)] == substr || stringContainsFold(s[1:], substr)))) || (len(s) > len(substr) && stringContainsFold(s[1:], substr)))
 }
 
 func Execute() {

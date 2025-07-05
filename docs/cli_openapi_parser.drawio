@@ -16,26 +16,32 @@
                 <mxCell id="5" value="OpenAPI Structure" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#bbf;strokeColor=#333;strokeWidth=2;" parent="1" vertex="1">
                     <mxGeometry x="60" y="310" width="200" height="60" as="geometry"/>
                 </mxCell>
+                <mxCell id="23" value="OWASP Top 10 Checks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffb366;strokeColor=#333;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="320" y="310" width="220" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="24" value="- No Authentication\n- GET for create/delete\n- No HTTPS\n- Query param w/o type\n- Insecure Methods" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#333;strokeWidth=1;" parent="1" vertex="1">
+                    <mxGeometry x="540" y="430" width="220" height="80" as="geometry"/>
+                </mxCell>
                 <mxCell id="6" value="Paths" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#bfb;strokeColor=#333;strokeWidth=1;" parent="1" vertex="1">
-                    <mxGeometry x="20" y="410" width="100" height="40" as="geometry"/>
+                    <mxGeometry x="10" y="460" width="100" height="40" as="geometry"/>
                 </mxCell>
                 <mxCell id="7" value="Methods" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#bfb;strokeColor=#333;strokeWidth=1;" parent="1" vertex="1">
-                    <mxGeometry x="130" y="410" width="100" height="40" as="geometry"/>
+                    <mxGeometry x="130" y="460" width="100" height="40" as="geometry"/>
                 </mxCell>
                 <mxCell id="8" value="Security" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#bfb;strokeColor=#333;strokeWidth=1;" parent="1" vertex="1">
-                    <mxGeometry x="240" y="410" width="100" height="40" as="geometry"/>
+                    <mxGeometry x="240" y="460" width="100" height="40" as="geometry"/>
                 </mxCell>
                 <mxCell id="9" value="Parameters" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#bfb;strokeColor=#333;strokeWidth=1;" parent="1" vertex="1">
-                    <mxGeometry x="350" y="410" width="100" height="40" as="geometry"/>
+                    <mxGeometry x="350" y="460" width="100" height="40" as="geometry"/>
                 </mxCell>
                 <mxCell id="10" value="Iterate over doc.Paths.Map()" style="dashed=1;rounded=1;whiteSpace=wrap;html=1;" parent="1" vertex="1">
-                    <mxGeometry x="-70" y="510" width="160" height="40" as="geometry"/>
+                    <mxGeometry x="-110" y="545" width="160" height="40" as="geometry"/>
                 </mxCell>
                 <mxCell id="11" value="Iterate over pathItem.Operations()" style="dashed=1;rounded=1;whiteSpace=wrap;html=1;" parent="1" vertex="1">
-                    <mxGeometry x="100" y="520" width="180" height="40" as="geometry"/>
+                    <mxGeometry x="90" y="545" width="180" height="40" as="geometry"/>
                 </mxCell>
                 <mxCell id="12" value="Iterate over op.Parameters" style="dashed=1;rounded=1;whiteSpace=wrap;html=1;" parent="1" vertex="1">
-                    <mxGeometry x="350" y="520" width="160" height="40" as="geometry"/>
+                    <mxGeometry x="320" y="530" width="160" height="40" as="geometry"/>
                 </mxCell>
                 <mxCell id="13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="2" target="3" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
@@ -44,6 +50,12 @@
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
                 <mxCell id="15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="4" target="5" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="25" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="5" target="23" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="26" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="23" target="24" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
                 <mxCell id="16" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="5" target="6" edge="1">
