@@ -4,18 +4,21 @@ Copyright © 2025 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
-	"database/sql"
+	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/fatih/color"
 
+	"errors"
+
 	"github.com/getkin/kin-openapi/openapi3"
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
 )
 
@@ -24,6 +27,7 @@ var outputFormat string
 var outputFile string
 var metricsDBPath string
 var showMetrics bool
+var ctx = context.Background()
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -37,197 +41,193 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 }
 
+// RunParse is the main function that parses the OpenAPI specification and checks for OWASP Top 10 issues
+func RunParse(filePath, outputFormat, outputFile, metricsDBPath string, showMetrics bool) (int, string) {
+	if showMetrics {
+		client := openRedisClient()
+		var sb strings.Builder
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+		_ = printMetricsRedis(client)
+		if err := w.Close(); err != nil {
+			sb.WriteString("[WARN] error closing pipe: " + err.Error() + "\n")
+		}
+		os.Stdout = old
+		out, _ := io.ReadAll(r)
+		sb.Write(out)
+		return 0, sb.String()
+	}
+	if filePath == "" {
+		return 1, "Please provide a file path with --file"
+	}
+	if err := isSafePath(filePath); err != nil {
+		return 1, "Invalid file path: " + err.Error()
+	}
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return 1, fmt.Sprintf("Error reading file: %v", err)
+	}
+	var loader openapi3.Loader
+	doc, err := loader.LoadFromData(data)
+	if err != nil {
+		return 1, fmt.Sprintf("Error parsing OpenAPI spec: %v", err)
+	}
+
+	failures := make(map[string][]string)
+	severity := map[string]string{
+		"No Authentication":            "high",
+		"Insecure HTTP Methods":        "high",
+		"No HTTPS":                     "high",
+		"GET used for create/delete":   "medium",
+		"Query parameter without type": "low",
+	}
+
+	for path, pathItem := range doc.Paths.Map() {
+		for method, op := range pathItem.Operations() {
+			if op.Security != nil && len(*op.Security) == 0 {
+				failures["No Authentication"] = append(failures["No Authentication"], fmt.Sprintf("%s %s", method, path))
+			}
+			if method == "GET" && (op.OperationID != "" && (containsWord(op.OperationID, "create") || containsWord(op.OperationID, "delete"))) {
+				failures["GET used for create/delete"] = append(failures["GET used for create/delete"], fmt.Sprintf("%s %s (operationId: %s)", method, path, op.OperationID))
+			}
+			if method == "TRACE" || method == "OPTIONS" {
+				failures["Insecure HTTP Methods"] = append(failures["Insecure HTTP Methods"], fmt.Sprintf("%s %s", method, path))
+			}
+			for _, param := range op.Parameters {
+				if param.Value.In == "query" && param.Value.Schema == nil {
+					failures["Query parameter without type"] = append(failures["Query parameter without type"], fmt.Sprintf("%s %s param: %s", method, path, param.Value.Name))
+				}
+			}
+		}
+	}
+	for _, server := range doc.Servers {
+		if server.URL != "" && !startsWithHTTPS(server.URL) {
+			failures["No HTTPS"] = append(failures["No HTTPS"], server.URL)
+		}
+	}
+
+	hasHigh := false
+	highCount, mediumCount, lowCount := 0, 0, 0
+	for category, items := range failures {
+		sev := severity[category]
+		if sev == "high" && len(items) > 0 {
+			hasHigh = true
+		}
+		switch sev {
+		case "high":
+			highCount += len(items)
+		case "medium":
+			mediumCount += len(items)
+		case "low":
+			lowCount += len(items)
+		}
+	}
+
+	client := openRedisClient()
+	_ = updateMetricsRedis(client, highCount, mediumCount, lowCount)
+	var sb strings.Builder
+	if outputFormat == "json" {
+		output := map[string]interface{}{"issues": []map[string]interface{}{}, "summary": map[string]int{"high": 0, "medium": 0, "low": 0}}
+		for category, items := range failures {
+			sev := severity[category]
+			for _, item := range items {
+				output["issues"] = append(output["issues"].([]map[string]interface{}), map[string]interface{}{"category": category, "severity": sev, "item": item})
+				output["summary"].(map[string]int)[sev]++
+			}
+		}
+		jsonBytes, _ := json.MarshalIndent(output, "", "  ")
+		if outputFile != "" {
+			if err := os.WriteFile(outputFile, jsonBytes, 0600); err != nil {
+				return 1, "Error writing output file: " + err.Error()
+			}
+		}
+		sb.WriteString(string(jsonBytes))
+		if hasHigh {
+			return 1, sb.String()
+		}
+		return 0, sb.String()
+	}
+	if outputFormat == "markdown" {
+		sb.WriteString("# OWASP Top 10 Issues\n\n")
+		for category, items := range failures {
+			sev := severity[category]
+			sb.WriteString(fmt.Sprintf("## %s (%s)\n", category, strings.ToUpper(sev)))
+			for _, item := range items {
+				sb.WriteString(fmt.Sprintf("- %s\n", item))
+			}
+			sb.WriteString("\n")
+		}
+		if outputFile != "" {
+			if err := os.WriteFile(outputFile, []byte(sb.String()), 0600); err != nil {
+				return 1, "Error writing output file: " + err.Error()
+			}
+		}
+		if hasHigh {
+			return 1, sb.String()
+		}
+		return 0, sb.String()
+	}
+	if len(failures) == 0 {
+		if _, err := color.New(color.FgGreen).Fprintln(&sb, "No OWASP Top 10 issues found!"); err != nil {
+			sb.WriteString("[WARN] error writing to buffer: " + err.Error() + "\n")
+		}
+	} else {
+		if _, err := color.New(color.FgRed, color.Bold).Fprintln(&sb, "OWASP Top 10 Issues:"); err != nil {
+			sb.WriteString("[WARN] error writing to buffer: " + err.Error() + "\n")
+		}
+		for category, items := range failures {
+			sev := severity[category]
+			var c *color.Color
+			switch sev {
+			case "high":
+				c = color.New(color.FgRed, color.Bold)
+			case "medium":
+				c = color.New(color.FgYellow, color.Bold)
+			case "low":
+				c = color.New(color.FgYellow)
+			default:
+				c = color.New(color.FgWhite)
+			}
+			if _, err := c.Fprintf(&sb, "\n[%s] (%s)\n", category, strings.ToUpper(sev)); err != nil {
+				sb.WriteString("[WARN] error writing to buffer: " + err.Error() + "\n")
+			}
+			for _, item := range items {
+				if _, err := c.Fprintf(&sb, "- %s\n", item); err != nil {
+					sb.WriteString("[WARN] error writing to buffer: " + err.Error() + "\n")
+				}
+			}
+		}
+		if outputFile != "" {
+			var fileSB strings.Builder
+			fileSB.WriteString("# OWASP Top 10 Issues\n\n")
+			for category, items := range failures {
+				sev := severity[category]
+				fileSB.WriteString(fmt.Sprintf("## %s (%s)\n", category, strings.ToUpper(sev)))
+				for _, item := range items {
+					fileSB.WriteString(fmt.Sprintf("- %s\n", item))
+				}
+				fileSB.WriteString("\n")
+			}
+			if err := os.WriteFile(outputFile, []byte(fileSB.String()), 0600); err != nil {
+				return 1, "Error writing output file: " + err.Error()
+			}
+		}
+	}
+	sb.WriteString(fmt.Sprintf("\nFound issues: high=%d, medium=%d, low=%d\n", highCount, mediumCount, lowCount))
+	if hasHigh {
+		return 1, sb.String()
+	}
+	return 0, sb.String()
+}
+
 var parseCmd = &cobra.Command{
 	Use:   "parse",
 	Short: "Parse an OpenAPI (Swagger) specification file",
 	Run: func(cmd *cobra.Command, args []string) {
-		if showMetrics {
-			db, err := openMetricsDB()
-			if err != nil {
-				fmt.Println("Error opening metrics DB:", err)
-				os.Exit(1)
-			}
-			_ = printMetrics(db)
-			db.Close()
-			return
-		}
-		if filePath == "" {
-			fmt.Println("Please provide a file path with --file")
-			os.Exit(1)
-		}
-		data, err := ioutil.ReadFile(filePath)
-		if err != nil {
-			fmt.Printf("Error reading file: %v\n", err)
-			os.Exit(1)
-		}
-		var loader openapi3.Loader
-		doc, err := loader.LoadFromData(data)
-		if err != nil {
-			fmt.Printf("Error parsing OpenAPI spec: %v\n", err)
-			os.Exit(1)
-		}
-
-		// --- OWASP Top 10 Checks ---
-		failures := make(map[string][]string)
-		severity := make(map[string]string)
-
-		severity["No Authentication"] = "high"
-		severity["Insecure HTTP Methods"] = "high"
-		severity["No HTTPS"] = "high"
-		severity["GET used for create/delete"] = "medium"
-		severity["Query parameter without type"] = "low"
-
-		// 1. Routes without authentication (security: [])
-		for path, pathItem := range doc.Paths.Map() {
-			for method, op := range pathItem.Operations() {
-				if op.Security != nil && len(*op.Security) == 0 {
-					failures["No Authentication"] = append(failures["No Authentication"], fmt.Sprintf("%s %s", method, path))
-				}
-				// 2. GET for create/delete
-				if method == "GET" && (op.OperationID != "" && (containsWord(op.OperationID, "create") || containsWord(op.OperationID, "delete"))) {
-					failures["GET used for create/delete"] = append(failures["GET used for create/delete"], fmt.Sprintf("%s %s (operationId: %s)", method, path, op.OperationID))
-				}
-				// 5. Insecure HTTP Methods
-				if method == "TRACE" || method == "OPTIONS" {
-					failures["Insecure HTTP Methods"] = append(failures["Insecure HTTP Methods"], fmt.Sprintf("%s %s", method, path))
-				}
-				// 4. Query parameters without type
-				for _, param := range op.Parameters {
-					if param.Value.In == "query" && param.Value.Schema == nil {
-						failures["Query parameter without type"] = append(failures["Query parameter without type"], fmt.Sprintf("%s %s param: %s", method, path, param.Value.Name))
-					}
-				}
-			}
-		}
-		// 3. Absence of HTTPS
-		for _, server := range doc.Servers {
-			if server.URL != "" && !startsWithHTTPS(server.URL) {
-				failures["No HTTPS"] = append(failures["No HTTPS"], server.URL)
-			}
-		}
-
-		hasHigh := false
-		highCount, mediumCount, lowCount := 0, 0, 0
-		for category, items := range failures {
-			sev := severity[category]
-			if sev == "high" && len(items) > 0 {
-				hasHigh = true
-			}
-			switch sev {
-			case "high":
-				highCount += len(items)
-			case "medium":
-				mediumCount += len(items)
-			case "low":
-				lowCount += len(items)
-			}
-		}
-
-		// Atualizar métricas
-		db, err := openMetricsDB()
-		if err == nil {
-			_ = updateMetrics(db, highCount, mediumCount, lowCount)
-			db.Close()
-		}
-
-		if outputFormat == "json" {
-			output := map[string]interface{}{"issues": []map[string]interface{}{}, "summary": map[string]int{"high": 0, "medium": 0, "low": 0}}
-			for category, items := range failures {
-				sev := severity[category]
-				for _, item := range items {
-					output["issues"] = append(output["issues"].([]map[string]interface{}), map[string]interface{}{"category": category, "severity": sev, "item": item})
-					output["summary"].(map[string]int)[sev]++
-				}
-			}
-			jsonBytes, _ := json.MarshalIndent(output, "", "  ")
-			if outputFile != "" {
-				_ = ioutil.WriteFile(outputFile, jsonBytes, 0644)
-			}
-			fmt.Println(string(jsonBytes))
-			if hasHigh {
-				os.Exit(1)
-			}
-			return
-		}
-		if outputFormat == "markdown" {
-			var sb strings.Builder
-			sb.WriteString("# OWASP Top 10 Issues\n\n")
-			for category, items := range failures {
-				sev := severity[category]
-				sb.WriteString(fmt.Sprintf("## %s (%s)\n", category, strings.ToUpper(sev)))
-				for _, item := range items {
-					sb.WriteString(fmt.Sprintf("- %s\n", item))
-				}
-				sb.WriteString("\n")
-			}
-			if outputFile != "" {
-				_ = ioutil.WriteFile(outputFile, []byte(sb.String()), 0644)
-			}
-			fmt.Print(sb.String())
-			if hasHigh {
-				os.Exit(1)
-			}
-			return
-		}
-
-		if len(failures) == 0 {
-			color.New(color.FgGreen).Println("No OWASP Top 10 issues found!")
-		} else {
-			color.New(color.FgRed, color.Bold).Println("OWASP Top 10 Issues:")
-			for category, items := range failures {
-				sev := severity[category]
-				var c *color.Color
-				switch sev {
-				case "high":
-					c = color.New(color.FgRed, color.Bold)
-				case "medium":
-					c = color.New(color.FgYellow, color.Bold)
-				case "low":
-					c = color.New(color.FgYellow)
-				default:
-					c = color.New(color.FgWhite)
-				}
-				c.Printf("\n[%s] (%s)\n", category, strings.ToUpper(sev))
-				for _, item := range items {
-					c.Printf("- %s\n", item)
-				}
-			}
-			if outputFile != "" {
-				var sb strings.Builder
-				sb.WriteString("# OWASP Top 10 Issues\n\n")
-				for category, items := range failures {
-					sev := severity[category]
-					sb.WriteString(fmt.Sprintf("## %s (%s)\n", category, strings.ToUpper(sev)))
-					for _, item := range items {
-						sb.WriteString(fmt.Sprintf("- %s\n", item))
-					}
-					sb.WriteString("\n")
-				}
-				_ = ioutil.WriteFile(outputFile, []byte(sb.String()), 0644)
-			}
-			if hasHigh {
-				os.Exit(1)
-			}
-		}
-
-		fmt.Println("\nPaths:")
-		for path, pathItem := range doc.Paths.Map() {
-			fmt.Printf("- %s\n", path)
-			for method := range pathItem.Operations() {
-				fmt.Printf("  - Method: %s\n", method)
-			}
-		}
-		fmt.Println("Security:", doc.Security)
-		fmt.Println("Parameters:")
-		for _, pathItem := range doc.Paths.Map() {
-			for _, op := range pathItem.Operations() {
-				for _, param := range op.Parameters {
-					fmt.Printf("- %s (%s)\n", param.Value.Name, param.Value.In)
-				}
-			}
-		}
-
-		fmt.Printf("\nFalhas encontradas: high=%d, medium=%d, low=%d\n", highCount, mediumCount, lowCount)
+		exitCode, output := RunParse(filePath, outputFormat, outputFile, metricsDBPath, showMetrics)
+		fmt.Print(output)
+		os.Exit(exitCode)
 	},
 }
 
@@ -264,48 +264,57 @@ func init() {
 	rootCmd.AddCommand(parseCmd)
 }
 
-func openMetricsDB() (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", metricsDBPath)
-	if err != nil {
-		return nil, err
+func openRedisClient() *redis.Client {
+	host := os.Getenv("REDIS_HOST")
+	if host == "" {
+		host = "localhost"
 	}
-	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS metrics (
-		id INTEGER PRIMARY KEY,
-		executions INTEGER,
-		high INTEGER,
-		medium INTEGER,
-		low INTEGER,
-		last_run TEXT
-	)`)
-	if err != nil {
-		return nil, err
+	port := os.Getenv("REDIS_PORT")
+	if port == "" {
+		port = "6379"
 	}
-	// Ensure at least one row
-	_, err = db.Exec(`INSERT OR IGNORE INTO metrics (id, executions, high, medium, low, last_run) VALUES (1, 0, 0, 0, 0, '')`)
-	if err != nil {
-		return nil, err
-	}
-	return db, nil
+	addr := host + ":" + port
+	return redis.NewClient(&redis.Options{
+		Addr: addr,
+		DB:   0,
+	})
 }
 
-func updateMetrics(db *sql.DB, high, medium, low int) error {
-	_, err := db.Exec(`UPDATE metrics SET executions = executions + 1, high = high + ?, medium = medium + ?, low = low + ?, last_run = ? WHERE id = 1`, high, medium, low, time.Now().Format(time.RFC3339))
+func updateMetricsRedis(client *redis.Client, high, medium, low int) error {
+	pipe := client.TxPipeline()
+	pipe.Incr(ctx, "metrics:executions")
+	pipe.IncrBy(ctx, "metrics:high", int64(high))
+	pipe.IncrBy(ctx, "metrics:medium", int64(medium))
+	pipe.IncrBy(ctx, "metrics:low", int64(low))
+	pipe.Set(ctx, "metrics:last_run", time.Now().Format(time.RFC3339), 0)
+	_, err := pipe.Exec(ctx)
 	return err
 }
 
-func printMetrics(db *sql.DB) error {
-	row := db.QueryRow(`SELECT executions, high, medium, low, last_run FROM metrics WHERE id = 1`)
-	var execs, high, medium, low int
-	var lastRun string
-	err := row.Scan(&execs, &high, &medium, &low, &lastRun)
-	if err != nil {
-		return err
+func printMetricsRedis(client *redis.Client) error {
+	execs, _ := client.Get(ctx, "metrics:executions").Result()
+	high, _ := client.Get(ctx, "metrics:high").Result()
+	medium, _ := client.Get(ctx, "metrics:medium").Result()
+	low, _ := client.Get(ctx, "metrics:low").Result()
+	lastRun, _ := client.Get(ctx, "metrics:last_run").Result()
+	fmt.Println("\n==== CLI Metrics (Redis) ====")
+	fmt.Println("Total executions:", execs)
+	fmt.Println("Total high severity issues:", high)
+	fmt.Println("Total medium severity issues:", medium)
+	fmt.Println("Total low severity issues:", low)
+	fmt.Println("Last run:", lastRun)
+	return nil
+}
+
+func isSafePath(filePath string) error {
+	if os.Getenv("SWAGGER_GUARD_ALLOW_ABS_PATH") == "1" {
+		return nil
 	}
-	fmt.Println("\n==== CLI Metrics ====")
-	fmt.Printf("Total executions: %d\n", execs)
-	fmt.Printf("Total high severity issues: %d\n", high)
-	fmt.Printf("Total medium severity issues: %d\n", medium)
-	fmt.Printf("Total low severity issues: %d\n", low)
-	fmt.Printf("Last run: %s\n", lastRun)
+	if filepath.IsAbs(filePath) {
+		return errors.New("absolute paths are not allowed")
+	}
+	if strings.Contains(filePath, "..") {
+		return errors.New("path traversal is not allowed")
+	}
 	return nil
 }

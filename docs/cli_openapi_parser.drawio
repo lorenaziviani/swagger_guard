@@ -124,7 +124,7 @@
                 <mxCell id="42" value="" style="shape=stencil(fZbdcgIhDIWfZm8zQAg/17Z9j85U606tdqz9e/tmZ0c0uJ47xP0I5JwEBl59bp8/1kNwn6fj4W39M76ctgM/DCGM++36OJ50NPDjwKvN4bh+PR6+9i/z74/n6ctp9H74nlb4nbmSKZeJCu5vngmZ6jzzNAO7cX8FVKEsBuBKrgKg9oAE8gkCbLeUhEoEQKSUDZDLeWYRKIl8MEDRmHwfyBrBG6Amyu4+kDxxMoB3jhwgYu7TVAsVkFcWCs4CTBEoF4RctKeOxHIf8IXYpikHikAIf+MNUW94AGSSaoAoFIE3AlOyeWU+p2E5S9yfQZcQILVuQOwZdJNoS9Ls3wA5u2XZTIHECqeJ9kDpSaauRiNVcAY1QhdBzeLBli5WazpkSsBLV25uRaqWRyFawTQzRRIQYirJzq5atkBqLfouwqUxLBepthWb10vrWZY6UOAeyKCCtDV625mm9gmUC4Wc3VLJMMIE1BsA2FW9JraVlQB7n3c9oMKhCLEvIM1zBPZ25/umNQ1tVEC2G+fFCC8g398O2hNQuQlVu752DBfA+q0ptnqO5JFmeuIuo9DY7KjY71UxdJV4EntifPWorW++R/dC4t7V3DlIB5cHx2bc7eb3yvX//QNFp+bHDT/+Aw==);lineShape=1;strokeColor=default;" parent="1" vertex="1">
                     <mxGeometry x="288.86796084247567" y="357.87531245851915" width="4.67253977211567" height="4.665236216357243" as="geometry"/>
                 </mxCell>
-                <mxCell id="43" value="Metrics (SQLite)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2e3e5;strokeColor=#333;strokeWidth=2;" parent="1" vertex="1">
+                <mxCell id="43" value="Metrics (Redis)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2e3e5;strokeColor=#333;strokeWidth=2;" parent="1" vertex="1">
                     <mxGeometry x="990" y="20" width="220" height="60" as="geometry"/>
                 </mxCell>
                 <mxCell id="44" value="--metrics flag: show stats" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3cd;strokeColor=#333;strokeWidth=1;" parent="1" vertex="1">

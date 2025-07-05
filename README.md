@@ -14,12 +14,133 @@ cd swagger_guard
 go mod tidy
 ```
 
+## Configuração de Ambiente (.env)
+
+O projeto suporta configuração via arquivo `.env`. Um exemplo está disponível como `.env.example`:
+
+```env
+# swagger_guard - Example environment variables
+
+# Redis connection
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# Optional: log and output settings
+LOG_LEVEL=info
+OUTPUT_FORMAT=cli
+OUTPUT_FILE=
+```
+
+Para usar, copie o arquivo de exemplo:
+
+```sh
+cp .env.example .env
+```
+
+Edite conforme necessário para o seu ambiente.
+
+## Persistência de Métricas
+
+As métricas são persistidas no Redis. Configure as variáveis de ambiente:
+
+```
+export REDIS_HOST=localhost
+export REDIS_PORT=6379
+```
+
+Ou utilize Docker Compose:
+
+```yaml
+version: "3.8"
+services:
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+  swagger_guard:
+    build: .
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+```
+
+## Resetando métricas no Redis
+
+Para limpar as métricas acumuladas:
+
+```sh
+redis-cli DEL metrics:executions metrics:high metrics:medium metrics:low metrics:last_run
+```
+
 ## Uso
 
 Execute o comando parse informando o arquivo da especificação:
 
 ```sh
 go run main.go parse --file ./api-spec.yaml
+```
+
+## Uso com Docker
+
+### Build da imagem
+
+```sh
+docker build -t swagger_guard .
+```
+
+### Executando o scanner
+
+```sh
+docker run --rm -e REDIS_HOST=host.docker.internal -e REDIS_PORT=6379 -v $(pwd):/app swagger_guard parse --file api-spec.yaml --output cli
+```
+
+### Exemplo: relatório JSON salvo em arquivo
+
+```sh
+docker run --rm -e REDIS_HOST=host.docker.internal -e REDIS_PORT=6379 -v $(pwd):/app swagger_guard parse --file api-spec.yaml --output json --output-file report.json
+```
+
+### Exemplo: visualizar métricas
+
+```sh
+docker run --rm -e REDIS_HOST=host.docker.internal -e REDIS_PORT=6379 -v $(pwd):/app swagger_guard parse --metrics
+```
+
+## Uso com Docker Compose
+
+```sh
+docker-compose up --build
+```
+
+## Exemplo de workflow CI/CD (GitHub Actions)
+
+```yaml
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports: [6379:6379]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.21"
+      - name: Build
+        run: go build ./...
+      - name: Test
+        run: go test ./...
+      - name: Run scanner
+        run: |
+          export REDIS_HOST=localhost
+          export REDIS_PORT=6379
+          ./swagger_guard parse --file api-spec.yaml --metrics
 ```
 
 ## Exemplo de api-spec.yaml
@@ -220,3 +341,9 @@ Last run: 2024-06-10T15:30:00Z
 ```
 
 Você pode customizar o caminho do banco com `--metrics-db <arquivo>`.
+
+## Notas
+
+- O parâmetro `--metrics-db` não é mais necessário, mas permanece para compatibilidade.
+- Não é mais necessário montar volumes para persistência de métricas.
+- Para resetar métricas, limpe as chaves no Redis manualmente.
