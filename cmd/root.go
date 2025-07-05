@@ -4,15 +4,21 @@ Copyright © 2025 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
+
+	"github.com/fatih/color"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/spf13/cobra"
 )
 
 var filePath string
+var outputFormat string
+var outputFile string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -48,6 +54,13 @@ var parseCmd = &cobra.Command{
 
 		// --- OWASP Top 10 Checks ---
 		failures := make(map[string][]string)
+		severity := make(map[string]string)
+
+		severity["No Authentication"] = "high"
+		severity["Insecure HTTP Methods"] = "high"
+		severity["No HTTPS"] = "high"
+		severity["GET used for create/delete"] = "medium"
+		severity["Query parameter without type"] = "low"
 
 		// 1. Routes without authentication (security: [])
 		for path, pathItem := range doc.Paths.Map() {
@@ -78,15 +91,74 @@ var parseCmd = &cobra.Command{
 			}
 		}
 
-		if len(failures) == 0 {
-			fmt.Println("No OWASP Top 10 issues found!")
-		} else {
-			fmt.Println("OWASP Top 10 Issues:")
+		if outputFormat == "json" {
+			output := map[string]interface{}{"issues": []map[string]interface{}{}, "summary": map[string]int{"high": 0, "medium": 0, "low": 0}}
 			for category, items := range failures {
-				fmt.Printf("\n[%s]\n", category)
+				sev := severity[category]
 				for _, item := range items {
-					fmt.Printf("- %s\n", item)
+					output["issues"] = append(output["issues"].([]map[string]interface{}), map[string]interface{}{"category": category, "severity": sev, "item": item})
+					output["summary"].(map[string]int)[sev]++
 				}
+			}
+			jsonBytes, _ := json.MarshalIndent(output, "", "  ")
+			if outputFile != "" {
+				_ = ioutil.WriteFile(outputFile, jsonBytes, 0644)
+			}
+			fmt.Println(string(jsonBytes))
+			return
+		}
+		if outputFormat == "markdown" {
+			var sb strings.Builder
+			sb.WriteString("# OWASP Top 10 Issues\n\n")
+			for category, items := range failures {
+				sev := severity[category]
+				sb.WriteString(fmt.Sprintf("## %s (%s)\n", category, strings.ToUpper(sev)))
+				for _, item := range items {
+					sb.WriteString(fmt.Sprintf("- %s\n", item))
+				}
+				sb.WriteString("\n")
+			}
+			if outputFile != "" {
+				_ = ioutil.WriteFile(outputFile, []byte(sb.String()), 0644)
+			}
+			fmt.Print(sb.String())
+			return
+		}
+
+		if len(failures) == 0 {
+			color.New(color.FgGreen).Println("No OWASP Top 10 issues found!")
+		} else {
+			color.New(color.FgRed, color.Bold).Println("OWASP Top 10 Issues:")
+			for category, items := range failures {
+				sev := severity[category]
+				var c *color.Color
+				switch sev {
+				case "high":
+					c = color.New(color.FgRed, color.Bold)
+				case "medium":
+					c = color.New(color.FgYellow, color.Bold)
+				case "low":
+					c = color.New(color.FgYellow)
+				default:
+					c = color.New(color.FgWhite)
+				}
+				c.Printf("\n[%s] (%s)\n", category, strings.ToUpper(sev))
+				for _, item := range items {
+					c.Printf("- %s\n", item)
+				}
+			}
+			if outputFile != "" {
+				var sb strings.Builder
+				sb.WriteString("# OWASP Top 10 Issues\n\n")
+				for category, items := range failures {
+					sev := severity[category]
+					sb.WriteString(fmt.Sprintf("## %s (%s)\n", category, strings.ToUpper(sev)))
+					for _, item := range items {
+						sb.WriteString(fmt.Sprintf("- %s\n", item))
+					}
+					sb.WriteString("\n")
+				}
+				_ = ioutil.WriteFile(outputFile, []byte(sb.String()), 0644)
 			}
 		}
 
@@ -135,5 +207,7 @@ func Execute() {
 func init() {
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 	parseCmd.Flags().StringVar(&filePath, "file", "", "Path to the OpenAPI spec file (.yaml or .json)")
+	parseCmd.Flags().StringVar(&outputFormat, "output", "cli", "Output format: cli, json, markdown")
+	parseCmd.Flags().StringVar(&outputFile, "output-file", "", "Output file path (optional)")
 	rootCmd.AddCommand(parseCmd)
 }

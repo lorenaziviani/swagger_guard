@@ -93,3 +93,68 @@ Se nenhuma falha for encontrada:
 ```
 No OWASP Top 10 issues found!
 ```
+
+## Formatos de saída e relatórios
+
+O comando `parse` suporta múltiplos formatos de saída:
+
+- `--output cli` (padrão): saída colorida no terminal
+- `--output json`: saída estruturada em JSON
+- `--output markdown`: saída em Markdown
+- `--output-file <arquivo>`: salva o relatório em arquivo externo
+
+### Exemplo de uso
+
+```sh
+go run main.go parse --file ./api-spec.yaml --output cli
+
+go run main.go parse --file ./api-spec.yaml --output json --output-file report.json
+
+go run main.go parse --file ./api-spec.yaml --output markdown --output-file report.md
+```
+
+### Severidade das falhas
+
+- **high**: vermelho (No Authentication, Insecure HTTP Methods, No HTTPS)
+- **medium**: amarelo (GET used for create/delete)
+- **low**: amarelo (Query parameter without type)
+
+### Exemplo de saída CLI
+
+```sh
+OWASP Top 10 Issues:
+
+[No Authentication] (HIGH)
+- GET /users
+
+[No HTTPS] (HIGH)
+- http://api.insegura.com
+
+[Query parameter without type] (LOW)
+- GET /users param: filter
+```
+
+### Exemplo de saída JSON
+
+```json
+{
+  "issues": [
+    {
+      "category": "No Authentication",
+      "severity": "high",
+      "item": "GET /users"
+    },
+    {
+      "category": "No HTTPS",
+      "severity": "high",
+      "item": "http://api.insegura.com"
+    },
+    {
+      "category": "Query parameter without type",
+      "severity": "low",
+      "item": "GET /users param: filter"
+    }
+  ],
+  "summary": { "high": 2, "medium": 0, "low": 1 }
+}
+```
