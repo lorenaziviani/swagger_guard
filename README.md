@@ -1,349 +1,248 @@
-# swagger_guard
+# 🚦 Swagger Guard - Segurança & Auditoria de APIs OpenAPI
 
-Auditoria automática de segurança para APIs baseada em especificações OpenAPI (Swagger).
+<div align="center">
+<img src=".gitassets/cover.png" width="350" />
 
-## Objetivo
+<div data-badges>
+  <img src="https://img.shields.io/github/stars/lorenaziviani/swagger_guard?style=for-the-badge&logo=github" alt="GitHub stars" />
+  <img src="https://img.shields.io/github/forks/lorenaziviani/swagger_guard?style=for-the-badge&logo=github" alt="GitHub forks" />
+  <img src="https://img.shields.io/github/last-commit/lorenaziviani/swagger_guard?style=for-the-badge&logo=github" alt="GitHub last commit" />
+</div>
 
-Fornecer uma ferramenta CLI em Go para analisar especificações OpenAPI, mapeando endpoints, métodos, parâmetros e requisitos de segurança, facilitando a auditoria e identificação de potenciais riscos.
+<div data-badges>
+  <img src="https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go" />
+  <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis" />
+  <img src="https://img.shields.io/badge/GitHub%20Actions-2088FF?style=for-the-badge&logo=github-actions&logoColor=white" alt="GitHub Actions" />
+</div>
+</div>
 
-## Instalação
+O **Swagger Guard** é um scanner CLI em Go para auditoria automática de segurança de APIs OpenAPI/Swagger, com foco em OWASP Top 10, integração CI/CD, métricas persistentes (Redis) e relatórios customizáveis.
 
-```sh
-git clone https://github.com/lorenaziviani/swagger_guard.git
-cd swagger_guard
-go mod tidy
-```
+✔️ **Detecção automática de falhas OWASP Top 10**
 
-## Configuração de Ambiente (.env)
+✔️ **Relatórios CLI, JSON e Markdown**
 
-O projeto suporta configuração via arquivo `.env`. Um exemplo está disponível como `.env.example`:
+✔️ **Persistência de métricas em Redis**
 
-```env
-# swagger_guard - Example environment variables
+✔️ **Pronto para CI/CD, Docker e Compose**
 
-# Redis connection
-REDIS_HOST=localhost
-REDIS_PORT=6379
+✔️ **Extensível e fácil de integrar**
 
-# Optional: log and output settings
-LOG_LEVEL=info
-OUTPUT_FORMAT=cli
-OUTPUT_FILE=
-```
+---
 
-Para usar, copie o arquivo de exemplo:
+## 🖥️ Como rodar este projeto
 
-```sh
-cp .env.example .env
-```
+### Requisitos:
 
-Edite conforme necessário para o seu ambiente.
+- [Go 1.21+](https://golang.org/doc/install)
+- [Docker & Docker Compose](https://docs.docker.com/get-docker/)
+- Redis (local ou via Docker)
 
-## Persistência de Métricas
+### Execução rápida:
 
-As métricas são persistidas no Redis. Configure as variáveis de ambiente:
+1. Clone o repositório:
+   ```sh
+   git clone https://github.com/lorenaziviani/swagger_guard.git
+   cd swagger_guard
+   go mod tidy
+   ```
+2. Configure as variáveis de ambiente:
+   ```sh
+   cp .env.example .env
+   # Edite .env conforme necessário
+   ```
+3. Suba o Redis (se não tiver):
+   ```sh
+   docker run -d --name redis -p 6379:6379 redis:7
+   ```
+4. Rode o scanner:
+   ```sh
+   ./swagger_guard parse --file api-spec.yaml --output cli
+   ```
 
-```
-export REDIS_HOST=localhost
-export REDIS_PORT=6379
-```
-
-Ou utilize Docker Compose:
-
-```yaml
-version: "3.8"
-services:
-  redis:
-    image: redis:7
-    ports:
-      - "6379:6379"
-  swagger_guard:
-    build: .
-    environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-    depends_on:
-      - redis
-```
-
-## Resetando métricas no Redis
-
-Para limpar as métricas acumuladas:
-
-```sh
-redis-cli DEL metrics:executions metrics:high metrics:medium metrics:low metrics:last_run
-```
-
-## Uso
-
-Execute o comando parse informando o arquivo da especificação:
-
-```sh
-go run main.go parse --file ./api-spec.yaml
-```
-
-## Uso com Docker
-
-### Build da imagem
-
-```sh
-docker build -t swagger_guard .
-```
-
-### Executando o scanner
-
-```sh
-docker run --rm -e REDIS_HOST=host.docker.internal -e REDIS_PORT=6379 -v $(pwd):/app swagger_guard parse --file api-spec.yaml --output cli
-```
-
-### Exemplo: relatório JSON salvo em arquivo
-
-```sh
-docker run --rm -e REDIS_HOST=host.docker.internal -e REDIS_PORT=6379 -v $(pwd):/app swagger_guard parse --file api-spec.yaml --output json --output-file report.json
-```
-
-### Exemplo: visualizar métricas
-
-```sh
-docker run --rm -e REDIS_HOST=host.docker.internal -e REDIS_PORT=6379 -v $(pwd):/app swagger_guard parse --metrics
-```
-
-## Uso com Docker Compose
+### Execução com Docker Compose:
 
 ```sh
 docker-compose up --build
 ```
 
-## Exemplo de workflow CI/CD (GitHub Actions)
+---
 
-```yaml
-name: CI
-on: [push, pull_request]
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    services:
-      redis:
-        image: redis:7
-        ports: [6379:6379]
-    steps:
-      - uses: actions/checkout@v3
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: "1.21"
-      - name: Build
-        run: go build ./...
-      - name: Test
-        run: go test ./...
-      - name: Run scanner
-        run: |
-          export REDIS_HOST=localhost
-          export REDIS_PORT=6379
-          ./swagger_guard parse --file api-spec.yaml --metrics
-```
+## ✨ Exemplos de uso e prints
 
-## Exemplo de api-spec.yaml
-
-```yaml
-openapi: 3.0.0
-info:
-  title: Exemplo de API
-  version: "1.0.0"
-paths:
-  /usuarios:
-    get:
-      summary: Lista usuários
-      responses:
-        "200":
-          description: OK
-    post:
-      summary: Cria usuário
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                nome:
-                  type: string
-      responses:
-        "201":
-          description: Criado
-components:
-  securitySchemes:
-    ApiKeyAuth:
-      type: apiKey
-      in: header
-      name: X-API-KEY
-security:
-  - ApiKeyAuth: []
-```
-
-## Diagrama
-
-Veja o fluxo inicial do CLI e parser em `docs/cli_openapi_parser.drawio`.
-
-## Checagens automáticas OWASP Top 10
-
-O comando `parse` agora realiza checagens automáticas de segurança baseadas no OWASP Top 10:
-
-- **Rotas sem autenticação** (security: [])
-- **Uso de GET para criação/deleção**
-- **Ausência de HTTPS** (servers.url não usa https)
-- **Parâmetros de query sem tipo**
-- **Métodos inseguros** (TRACE, OPTIONS abertos)
-
-Exemplo de saída:
-
-```
-OWASP Top 10 Issues:
-
-[No Authentication]
-- GET /usuarios
-
-[No HTTPS]
-- http://api.exemplo.com
-
-[Query parameter without type]
-- GET /usuarios param: filtro
-```
-
-Se nenhuma falha for encontrada:
-
-```
-No OWASP Top 10 issues found!
-```
-
-## Formatos de saída e relatórios
-
-O comando `parse` suporta múltiplos formatos de saída:
-
-- `--output cli` (padrão): saída colorida no terminal
-- `--output json`: saída estruturada em JSON
-- `--output markdown`: saída em Markdown
-- `--output-file <arquivo>`: salva o relatório em arquivo externo
-
-### Exemplo de uso
+### 1. Análise de API insegura
 
 ```sh
-go run main.go parse --file ./api-spec.yaml --output cli
-
-go run main.go parse --file ./api-spec.yaml --output json --output-file report.json
-
-go run main.go parse --file ./api-spec.yaml --output markdown --output-file report.md
+./swagger_guard parse --file api-spec.yaml --output cli
 ```
 
-### Severidade das falhas
+Saída:
 
-- **high**: vermelho (No Authentication, Insecure HTTP Methods, No HTTPS)
-- **medium**: amarelo (GET used for create/delete)
-- **low**: amarelo (Query parameter without type)
-
-### Exemplo de saída CLI
-
-```sh
+```
 OWASP Top 10 Issues:
 
 [No Authentication] (HIGH)
 - GET /users
 
 [No HTTPS] (HIGH)
-- http://api.insegura.com
+- http://api.insecure.com
+
+[Insecure HTTP Methods] (HIGH)
+- TRACE /users
 
 [Query parameter without type] (LOW)
-- GET /users param: filter
+- GET /users param: filtro
+
+Found issues: high=3, medium=0, low=1
 ```
 
-### Exemplo de saída JSON
-
-```json
-{
-  "issues": [
-    {
-      "category": "No Authentication",
-      "severity": "high",
-      "item": "GET /users"
-    },
-    {
-      "category": "No HTTPS",
-      "severity": "high",
-      "item": "http://api.insegura.com"
-    },
-    {
-      "category": "Query parameter without type",
-      "severity": "low",
-      "item": "GET /users param: filter"
-    }
-  ],
-  "summary": { "high": 2, "medium": 0, "low": 1 }
-}
-```
-
-## Integração com CI/CD
-
-A ferramenta retorna exit code 1 se encontrar falhas de severidade **high** (críticas), permitindo uso em pipelines, pre-commit hooks e GitHub Actions.
-
-### Exemplo de uso em GitHub Actions
-
-```yaml
-name: Swagger Guard Scan
-on:
-  push:
-    paths:
-      - "api-spec.yaml"
-  pull_request:
-    paths:
-      - "api-spec.yaml"
-
-jobs:
-  scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Setup Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: "1.21"
-      - name: Install dependencies
-        run: go mod tidy
-      - name: Run Swagger Guard
-        run: go run main.go parse --file api-spec.yaml --output cli
-```
-
-Se houver falhas críticas, o job irá falhar (exit code 1).
-
-Também pode ser usado em pre-commit hooks ou outros pipelines CI/CD.
-
-## Métricas de uso
-
-A CLI armazena estatísticas de uso localmente em um banco SQLite (`metrics.db` por padrão):
-
-- Total de execuções
-- Total de falhas encontradas por severidade
-- Data/hora da última execução
-
-### Como visualizar métricas
+### 2. Relatório JSON
 
 ```sh
-go run main.go parse --metrics
+./swagger_guard parse --file api-spec.yaml --output json --output-file report.json
+cat report.json
 ```
 
-### Exemplo de saída
+### 3. Métricas acumuladas
+
+```sh
+./swagger_guard parse --metrics
+```
+
+Saída:
 
 ```
-==== CLI Metrics ====
+==== CLI Metrics (Redis) ====
 Total executions: 5
-Total high severity issues: 7
+Total high severity issues: 8
 Total medium severity issues: 2
 Total low severity issues: 3
-Last run: 2024-06-10T15:30:00Z
+Last run: 2025-07-05T18:51:39-03:00
 ```
 
-Você pode customizar o caminho do banco com `--metrics-db <arquivo>`.
+### 4. API segura
 
-## Notas
+```
+No OWASP Top 10 issues found!
+```
 
-- O parâmetro `--metrics-db` não é mais necessário, mas permanece para compatibilidade.
-- Não é mais necessário montar volumes para persistência de métricas.
-- Para resetar métricas, limpe as chaves no Redis manualmente.
+---
+
+## 📝 Features do projeto
+
+- 🔒 **Checagem automática OWASP Top 10** (rotas sem autenticação, métodos inseguros, ausência de HTTPS, etc)
+- 📊 **Relatórios CLI, JSON, Markdown**
+- 🗃️ **Persistência de métricas em Redis**
+- 🐳 **Pronto para Docker, Compose e CI/CD**
+- 🚦 **Exit code 1 para falhas críticas (ideal para pipelines)**
+- 🧩 **Extensível para novas regras e integrações**
+
+---
+
+## ⚙️ Comandos úteis
+
+```sh
+# Testes unitários e integração
+make test
+
+# Lint
+make lint
+
+# Análise de segurança do código
+make security
+
+# Build do binário
+make build
+
+# Build Docker
+make docker
+
+# Executar scanner via Docker Compose
+make docker-run-dev
+
+# Visualizar métricas
+make metrics
+```
+
+---
+
+## 🌐 Variáveis de Ambiente
+
+```env
+# .env.example
+REDIS_HOST=localhost
+REDIS_PORT=6379
+LOG_LEVEL=info
+OUTPUT_FORMAT=cli
+OUTPUT_FILE=
+```
+
+---
+
+## 📁 Estrutura de Pastas
+
+```
+swagger_guard/
+  go.mod
+  go.sum
+  docker-compose.yml
+  Makefile
+  .env.example
+  cmd/
+    root.go
+    root_test.go
+  docs/
+    cli_openapi_parser.drawio
+  .gitassets/
+    cover.png
+```
+
+---
+
+## 🏗️ Arquitetura do Sistema
+
+![Arquitetura Swagger Guard](docs/cli_openapi_parser.drawio.png)
+
+**Fluxo resumido:**
+
+1. Usuário executa o scanner CLI passando um arquivo OpenAPI/Swagger
+2. O parser carrega e valida a especificação
+3. As regras OWASP são aplicadas automaticamente
+4. Relatórios são gerados (CLI, JSON, Markdown)
+5. Métricas são persistidas no Redis
+6. Saída e exit code são retornados para uso local ou CI/CD
+
+---
+
+## 🖼️ Exemplos Visuais dos Cenários
+
+### Cenário 1: API Insegura (com falhas OWASP)
+
+![Cenário Inseguro](.gitassets/cenario1.png)
+
+- Rotas sem autenticação
+- Ausência de HTTPS
+- Parâmetro de query sem tipo
+- Método inseguro (TRACE)
+
+### Cenário 2: API Segura (sem falhas)
+
+![Cenário Seguro](.gitassets/cenario2.png)
+
+- Todas as rotas protegidas
+- Apenas HTTPS
+- Parâmetros tipados
+- Sem métodos inseguros
+
+---
+
+## 💎 Links úteis
+
+- [Go Documentation](https://golang.org/doc/)
+- [Redis](https://redis.io/)
+- [Docker](https://www.docker.com/)
+- [OWASP Top 10](https://owasp.org/www-project-top-ten/)
+- [GitHub Actions](https://docs.github.com/en/actions)
+
+---

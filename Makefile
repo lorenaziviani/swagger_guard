@@ -24,6 +24,3 @@ docker-run-dev:
 
 metrics:
 	docker-compose run --rm swagger_guard parse --metrics
-
-metrics-local:
-	REDIS_HOST=localhost REDIS_PORT=6379 go run main.go parse --metrics
