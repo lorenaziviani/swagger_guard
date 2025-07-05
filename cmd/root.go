@@ -4,21 +4,26 @@ Copyright © 2025 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/spf13/cobra"
 )
 
 var filePath string
 var outputFormat string
 var outputFile string
+var metricsDBPath string
+var showMetrics bool
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -36,6 +41,16 @@ var parseCmd = &cobra.Command{
 	Use:   "parse",
 	Short: "Parse an OpenAPI (Swagger) specification file",
 	Run: func(cmd *cobra.Command, args []string) {
+		if showMetrics {
+			db, err := openMetricsDB()
+			if err != nil {
+				fmt.Println("Error opening metrics DB:", err)
+				os.Exit(1)
+			}
+			_ = printMetrics(db)
+			db.Close()
+			return
+		}
 		if filePath == "" {
 			fmt.Println("Please provide a file path with --file")
 			os.Exit(1)
@@ -92,11 +107,27 @@ var parseCmd = &cobra.Command{
 		}
 
 		hasHigh := false
+		highCount, mediumCount, lowCount := 0, 0, 0
 		for category, items := range failures {
-			if severity[category] == "high" && len(items) > 0 {
+			sev := severity[category]
+			if sev == "high" && len(items) > 0 {
 				hasHigh = true
-				break
 			}
+			switch sev {
+			case "high":
+				highCount += len(items)
+			case "medium":
+				mediumCount += len(items)
+			case "low":
+				lowCount += len(items)
+			}
+		}
+
+		// Atualizar métricas
+		db, err := openMetricsDB()
+		if err == nil {
+			_ = updateMetrics(db, highCount, mediumCount, lowCount)
+			db.Close()
 		}
 
 		if outputFormat == "json" {
@@ -195,6 +226,8 @@ var parseCmd = &cobra.Command{
 				}
 			}
 		}
+
+		fmt.Printf("\nFalhas encontradas: high=%d, medium=%d, low=%d\n", highCount, mediumCount, lowCount)
 	},
 }
 
@@ -226,5 +259,53 @@ func init() {
 	parseCmd.Flags().StringVar(&filePath, "file", "", "Path to the OpenAPI spec file (.yaml or .json)")
 	parseCmd.Flags().StringVar(&outputFormat, "output", "cli", "Output format: cli, json, markdown")
 	parseCmd.Flags().StringVar(&outputFile, "output-file", "", "Output file path (optional)")
+	parseCmd.Flags().StringVar(&metricsDBPath, "metrics-db", "metrics.db", "Path to metrics SQLite database")
+	parseCmd.Flags().BoolVar(&showMetrics, "metrics", false, "Show accumulated metrics")
 	rootCmd.AddCommand(parseCmd)
+}
+
+func openMetricsDB() (*sql.DB, error) {
+	db, err := sql.Open("sqlite3", metricsDBPath)
+	if err != nil {
+		return nil, err
+	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS metrics (
+		id INTEGER PRIMARY KEY,
+		executions INTEGER,
+		high INTEGER,
+		medium INTEGER,
+		low INTEGER,
+		last_run TEXT
+	)`)
+	if err != nil {
+		return nil, err
+	}
+	// Ensure at least one row
+	_, err = db.Exec(`INSERT OR IGNORE INTO metrics (id, executions, high, medium, low, last_run) VALUES (1, 0, 0, 0, 0, '')`)
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
+func updateMetrics(db *sql.DB, high, medium, low int) error {
+	_, err := db.Exec(`UPDATE metrics SET executions = executions + 1, high = high + ?, medium = medium + ?, low = low + ?, last_run = ? WHERE id = 1`, high, medium, low, time.Now().Format(time.RFC3339))
+	return err
+}
+
+func printMetrics(db *sql.DB) error {
+	row := db.QueryRow(`SELECT executions, high, medium, low, last_run FROM metrics WHERE id = 1`)
+	var execs, high, medium, low int
+	var lastRun string
+	err := row.Scan(&execs, &high, &medium, &low, &lastRun)
+	if err != nil {
+		return err
+	}
+	fmt.Println("\n==== CLI Metrics ====")
+	fmt.Printf("Total executions: %d\n", execs)
+	fmt.Printf("Total high severity issues: %d\n", high)
+	fmt.Printf("Total medium severity issues: %d\n", medium)
+	fmt.Printf("Total low severity issues: %d\n", low)
+	fmt.Printf("Last run: %s\n", lastRun)
+	return nil
 }

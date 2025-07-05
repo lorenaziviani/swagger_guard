@@ -193,3 +193,30 @@ jobs:
 Se houver falhas críticas, o job irá falhar (exit code 1).
 
 Também pode ser usado em pre-commit hooks ou outros pipelines CI/CD.
+
+## Métricas de uso
+
+A CLI armazena estatísticas de uso localmente em um banco SQLite (`metrics.db` por padrão):
+
+- Total de execuções
+- Total de falhas encontradas por severidade
+- Data/hora da última execução
+
+### Como visualizar métricas
+
+```sh
+go run main.go parse --metrics
+```
+
+### Exemplo de saída
+
+```
+==== CLI Metrics ====
+Total executions: 5
+Total high severity issues: 7
+Total medium severity issues: 2
+Total low severity issues: 3
+Last run: 2024-06-10T15:30:00Z
+```
+
+Você pode customizar o caminho do banco com `--metrics-db <arquivo>`.
