@@ -1,0 +1,32 @@
+openapi: 3.0.0
+info:
+  title: API Example
+  version: "1.0.0"
+paths:
+  /usuarios:
+    get:
+      summary: List of users
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nome:
+                  type: string
+      responses:
+        "201":
+          description: Created
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-KEY
+security:
+  - ApiKeyAuth: []
