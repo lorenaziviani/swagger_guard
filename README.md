@@ -158,3 +158,38 @@ OWASP Top 10 Issues:
   "summary": { "high": 2, "medium": 0, "low": 1 }
 }
 ```
+
+## Integração com CI/CD
+
+A ferramenta retorna exit code 1 se encontrar falhas de severidade **high** (críticas), permitindo uso em pipelines, pre-commit hooks e GitHub Actions.
+
+### Exemplo de uso em GitHub Actions
+
+```yaml
+name: Swagger Guard Scan
+on:
+  push:
+    paths:
+      - "api-spec.yaml"
+  pull_request:
+    paths:
+      - "api-spec.yaml"
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.21"
+      - name: Install dependencies
+        run: go mod tidy
+      - name: Run Swagger Guard
+        run: go run main.go parse --file api-spec.yaml --output cli
+```
+
+Se houver falhas críticas, o job irá falhar (exit code 1).
+
+Também pode ser usado em pre-commit hooks ou outros pipelines CI/CD.

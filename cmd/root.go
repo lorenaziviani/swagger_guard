@@ -91,6 +91,14 @@ var parseCmd = &cobra.Command{
 			}
 		}
 
+		hasHigh := false
+		for category, items := range failures {
+			if severity[category] == "high" && len(items) > 0 {
+				hasHigh = true
+				break
+			}
+		}
+
 		if outputFormat == "json" {
 			output := map[string]interface{}{"issues": []map[string]interface{}{}, "summary": map[string]int{"high": 0, "medium": 0, "low": 0}}
 			for category, items := range failures {
@@ -105,6 +113,9 @@ var parseCmd = &cobra.Command{
 				_ = ioutil.WriteFile(outputFile, jsonBytes, 0644)
 			}
 			fmt.Println(string(jsonBytes))
+			if hasHigh {
+				os.Exit(1)
+			}
 			return
 		}
 		if outputFormat == "markdown" {
@@ -122,6 +133,9 @@ var parseCmd = &cobra.Command{
 				_ = ioutil.WriteFile(outputFile, []byte(sb.String()), 0644)
 			}
 			fmt.Print(sb.String())
+			if hasHigh {
+				os.Exit(1)
+			}
 			return
 		}
 
@@ -159,6 +173,9 @@ var parseCmd = &cobra.Command{
 					sb.WriteString("\n")
 				}
 				_ = ioutil.WriteFile(outputFile, []byte(sb.String()), 0644)
+			}
+			if hasHigh {
+				os.Exit(1)
 			}
 		}
 
